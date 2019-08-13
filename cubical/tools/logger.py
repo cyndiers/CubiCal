@@ -6,8 +6,10 @@
 # This module has been adapted from the DDFacet package,
 # (c) Cyril Tasse et al., see http://github.com/saopicc/DDFacet
 
+from __future__ import print_function
+from six import string_types
 import logging, logging.handlers, os, re, sys, multiprocessing
-import ModColor
+from . import ModColor
 
 # dict of logger wrappers created by the application
 _loggers = {}
@@ -28,7 +30,7 @@ def logToFile(filename, append=False):
         _file_handler.setLevel(logging.DEBUG)
         _file_handler.setFormatter(_logfile_formatter)
         # set it as the target for the existing wrappers' handlers
-        for wrapper in _loggers.itervalues():
+        for wrapper in _loggers.values():
             wrapper.logfile_handler.setTarget(_file_handler)
 
 def getLogFilename():
@@ -40,17 +42,25 @@ def getLogFilename():
 
 class _DefaultWriter(object):
     """A default writer logs messages to a logger"""
+    __print_once_keys = []
     def __init__(self, logger, level, color=None, bold=None):
         self.logger = logger
         self.level = level
         self.color = (color or "red") if bold else color
         self.bold = bool(color) if bold is None else bold
 
-    def write(self, message):
+    def write(self, message, level_override=None, print_once=None):
+        if print_once is not None:
+            if print_once in _DefaultWriter.__print_once_keys:
+                return
+            _DefaultWriter.__print_once_keys = list(set(_DefaultWriter.__print_once_keys + [print_once]))
+
         message = message.rstrip()
         if self.color and message:  # do not colorize empty messages, else "\n" is issued independently
             message = ModColor.Str(message, col=self.color, Bold=self.bold)
-        self.logger.log(self.level, message)
+        self.logger.log(self.level if level_override is None else level_override, message)
+
+    print = write
 
 class LoggerWrapper(object):
     def __init__(self, logger, verbose=None, log_verbose=None):
@@ -76,10 +86,6 @@ class LoggerWrapper(object):
         self.logger.addHandler(self.logfile_handler)
         self.logger.addFilter(_log_filter)
 
-        # make logger methods available
-        for method in "log", "debug", "info", "warning", "error", "critical", "exception":
-            setattr(self,method, getattr(self.logger, method))
-
     def verbosity(self, set_verb=None):
         if set_verb is not None:
             self._verbose = set_verb
@@ -97,7 +103,7 @@ class LoggerWrapper(object):
     def __call__(self, level, color=None):
         """
         Function call operator on logger. Use to issue messages at different verbosity levels.
-        E.g. print>>log(2),"message" will issue a message at level logging.INFO - 2.
+        E.g. log(2).print("message" will issue a message at level logging.INFO - 2.)
         An optional color argument will colorize the message.
 
         Returns:
@@ -106,27 +112,50 @@ class LoggerWrapper(object):
         # effective verbosity level is either set explicitly when the writer is created, or else use global level
         return _DefaultWriter(self.logger, logging.INFO - level, color=color)
     
-    def warn(self, msg, color=None):
+    def warn(self, msg, color=None, print_once=None):
         """
         Wrapper for log.warn
         """
-        _DefaultWriter(self.logger, logging.WARN, color=color).write(msg)
-    
-    def error(self, msg, color="red"):
+        _DefaultWriter(self.logger, logging.WARN, color=color).write(msg, print_once=print_once)
+
+    warning = warn
+
+    def error(self, msg, color="red", print_once=None):
         """
         Wrapper for log.error
         """
-        _DefaultWriter(self.logger, logging.ERROR, color=color).write(msg)
+        _DefaultWriter(self.logger, logging.ERROR, color=color).write(msg, print_once=print_once)
         
-    def info(self, msg, color=None):
+    def info(self, msg, color=None, print_once=None):
         """
         Wrapper for log.info
         """
-        _DefaultWriter(self.logger, logging.INFO, color=color).write(msg)
-    
-    def write(self, message):
-        return self.logger.info(message.rstrip())
+        _DefaultWriter(self.logger, logging.INFO, color=color).write(msg, print_once=print_once)
 
+    def critical(self, msg, color=None, print_once=None):
+        """
+        Wrapper for log.critical
+        """
+        _DefaultWriter(self.logger, logging.CRITICAL, color=color).write(msg, print_once=print_once)
+
+    def debug(self, msg, color=None, print_once=None):
+        """
+        Wrapper for log.debug
+        """
+        _DefaultWriter(self.logger, logging.DEBUG, color=color).write(msg, print_once=print_once)
+
+    def exception(self, msg, color=None, print_once=None):
+        """
+        Wrapper for log.exception
+        """
+        _DefaultWriter(self.logger, logging.EXCEPTION, color=color).write(msg, print_once=print_once)
+
+
+    print = info
+
+    def write(self, message, level=logging.INFO, verbosity=0, print_once=None, color=None):
+        _DefaultWriter(self.logger, level - int(verbosity), color=color).write(message,
+                                                                               print_once=print_once)
 
 _proc_status = '/proc/%d/status' % os.getpid()
 
@@ -250,9 +279,13 @@ class ColorStrippingFormatter(logging.Formatter):
         if self.strip:
             return re.sub("\033\\[[0-9]+m", "", msg, 0)
         else:
+            msg = re.sub("^INFO      ", "\033[1;37;42mINFO      \033[0m", msg)
+            msg = re.sub("^WARNING   ", "\033[1;37;43mWARNING   \033[0m", msg)
+            msg = re.sub("^CRITICAL  ", "\033[1;5;41mCRITICAL  \033[0m", msg)
+            msg = re.sub("^ERROR     ", "\033[1;5;41mERROR     \033[0m", msg)
             return msg
 
-_fmt = " - %(asctime)s - %(shortname)-18.18s %(subprocess)s%(memory)s%(separator)s%(message)s"
+_fmt = "%(levelname)-10s%(separator)s - %(asctime)s - %(shortname)-18.18s %(subprocess)s%(memory)s%(separator)s%(message)s"
 #        _fmt = "%(asctime)s %(name)-25.25s | %(message)s"
 _datefmt = '%H:%M:%S'#'%H:%M:%S.%f'
 _logfile_formatter = ColorStrippingFormatter(_fmt, _datefmt, strip=True)
@@ -265,7 +298,6 @@ def init(app_name):
     global _app_name
     global _root_logger
     if _root_logger is None:
-        logging.basicConfig(level=logging.DEBUG, fmt=_fmt, datefmt=_datefmt)
         _app_name = app_name
         _root_logger = logging.getLogger(app_name)
         _root_logger.setLevel(logging.DEBUG)
@@ -280,7 +312,7 @@ def getLogger(name, verbose=None, log_verbose=None):
 
     logger = logging.getLogger("{}.{}".format(_app_name, name))
     lw = _loggers[name] = LoggerWrapper(logger, verbose, log_verbose)
-    print>>lw(2), "logger initialized"
+    lw(2).print("logger initialized")
 
     return lw
 
@@ -295,14 +327,14 @@ def setGlobalVerbosity(verbosity):
     # ensure verbosity is turned into a list.
     if type(verbosity) is int:
         verbosity = [verbosity]
-    elif type(verbosity) is str:
+    elif isinstance(verbosity, string_types):
         verbosity = verbosity.split(",")
     elif not isinstance(verbosity, (list, tuple)):
         raise TypeError("can't parse verbosity specification of type '{}'".format(type(verbosity)))
     for element in verbosity:
         if type(element) is int or re.match("^[0-9]+$", element):
             _global_verbosity = int(element)
-            print>> log(0, "green"), "set global console verbosity level {}".format(_global_verbosity)
+            log(0, "green").print("set global console verbosity level {}".format(_global_verbosity))
         else:
             m = re.match("^(.+)=([0-9]+)$", element)
             if not m:
@@ -310,7 +342,7 @@ def setGlobalVerbosity(verbosity):
             logger = getLogger(m.group(1))
             level = int(m.group(2))
             logger.verbosity(level)
-            print>>logger(0,"green"),"set console verbosity level {}={}".format(m.group(1), level)
+            logger(0,"green").print("set console verbosity level {}={}".format(m.group(1), level))
 
 def setGlobalLogVerbosity(verbosity):
     global _global_log_verbosity
@@ -320,7 +352,7 @@ def setGlobalLogVerbosity(verbosity):
     # ensure verbosity is turned into a list.
     if type(verbosity) is int:
         verbosity = [verbosity]
-    elif type(verbosity) is str:
+    elif isinstance(verbosity, string_types):
         verbosity = verbosity.split(",")
     elif not isinstance(verbosity, (list, tuple)):
         raise TypeError("can't parse verbosity specification of type '{}'".format(type(verbosity)))
@@ -328,7 +360,7 @@ def setGlobalLogVerbosity(verbosity):
         if type(element) is int or re.match("^[0-9]+$", element):
             _global_log_verbosity = int(element)
             if _global_log_verbosity is not None:
-                print>> log(0, "green"), "set global log verbosity level {}".format(_global_log_verbosity)
+                log(0, "green").print("set global log verbosity level {}".format(_global_log_verbosity))
         else:
             m = re.match("^(.+)=([0-9]+)$", element)
             if not m:
@@ -336,13 +368,13 @@ def setGlobalLogVerbosity(verbosity):
             logger = getLogger(m.group(1))
             level = int(m.group(2))
             logger.log_verbosity(level)
-            print>>logger(0,"green"),"set log verbosity level {}={}".format(m.group(1), level)
+            logger(0,"green").print("set log verbosity level {}={}".format(m.group(1), level))
 
 
 def setSilent(Lname):
     """Silences the specified sublogger(s)"""
-    print>>log, ModColor.Str("set silent: %s" % Lname, col="red")
-    if type(Lname) is str:
+    log.print(ModColor.Str("set silent: %s" % Lname, col="red"))
+    if isinstance(Lname, string_types):
         getLogger(Lname).logger.setLevel(logging.CRITICAL)
     elif type(Lname) is list:
         for name in Lname:
@@ -351,8 +383,8 @@ def setSilent(Lname):
 
 def setLoud(Lname):
     """Un-silences the specified sublogger(s)"""
-    print>>log, ModColor.Str("set loud: %s" % Lname, col="green")
-    if type(Lname) is str:
+    log.print(ModColor.Str("set loud: %s" % Lname, col="green"))
+    if isinstance(Lname, string_types):
         getLogger(Lname).logger.setLevel(logging.DEBUG)
     elif type(Lname) is list:
         for name in Lname:
@@ -361,4 +393,4 @@ def setLoud(Lname):
 
 if __name__=="__main__":
     log=getLogger("a.x")
-    print>>log, "a.x"
+    log.print("a.x")
