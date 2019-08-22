@@ -238,13 +238,13 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                             #gp = self.gains[s, 0, f, p] ##a single solution interval for gains!
                             #gqH = np.conj(self.gains[s, 0, f, q])
                             #Subtract model for each direction.
-                            residual[0, t, f, p, q] -= gains[s, tt, ff, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, ff, q])
+                            residual[0, t, f, p, q] -= gains[s, tt, ff, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, ff, q].T)
                             for k in range(self.n_cor):
                                 #Get Jacobian.
                                 for param in range(self.n_param):
                                     #Get partial derivative of the phase.
                                     dphidalpha = 1.0j*self.basis[param, s]
-                                    jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k])
+                                    jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k]) #I do not need to transpose gains_q (scalar).
                                     jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k])
 
                         #Set [q,p] element as conjugate of [p,q] (LB - is this correct for the Jacobian as well?)
