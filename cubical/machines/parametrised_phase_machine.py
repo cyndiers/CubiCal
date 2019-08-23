@@ -180,13 +180,12 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             for t in range(self.n_timint):
                 for f in range(self.n_freint):
                     for p in range(self.n_ant):
-                        #To correct the dimension issue ((n_param,) instead of (n_param, 1)).
+                        #To correct for the dimension issue ((n_param,) instead of (n_param, 1)).
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
                         alpha_vec1 = (self.alpha[p, :, 1]).reshape(self.n_param)
                         #phase_equation = np.dot(alpha_vec, basis[:, s])
                         self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * np.dot(alpha_vec0, self.basis[:, s]))
                         self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s]))
-
 
     @classmethod
     def determine_diagonality(cls, options):
@@ -196,31 +195,40 @@ class ParametrisedPhaseMachine(PerIntervalGains):
     @property
     def dof_per_antenna(self):
         """This property returns the number of real degrees of freedom per antenna, per solution interval"""
-        ##Assuming a scalar case for the gains
+        ##Assuming diagonal gains!
         return self.n_param*2
     
     def compute_jacobian_residual(self, data_arr, model_arr, gains):
         """
         Returns the Jacobian and residual.
-
+    
+        Args:
+            data_arr (np.array):
+                Array containing the observed visibilities.
+            model_arr (np.array):
+                Array containing the model visibilities.
+            gains (np.array):
+                Array containing the current gain estimates.
+        
+        Returns:
+            jac (np.array):
+                Array of shape (n_tim, n_fre, n_ant, n_ant, n_cor, n_ant, n_param, n_cor)
+                containing the Jacobian.
+            residual (np.array):
+                Array containing the residual visibilities.
+            
         """
 
-        #import pdb; pdb.set_trace()
-
         #Initialise Jacobian.
-        #self.jac_shape = [self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_ant, self.n_param, self.n_cor, self.n_cor]
         self.jac_shape = [self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor, self.n_ant, self.n_param, self.n_cor] 
         jac = np.zeros(self.jac_shape, dtype=self.dtype)
 
         #----using cubical-----------#
-
+        ##Need to check this with Jonathan!
         #self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
-
 
         #Initialise residual as data since we just need to subtract the model in every direction.
         residual = data_arr.copy()
-       # print("I am inside compute_..._residual!")
-        #log(2).print("{} nparam".format(self.n_param))
 
         for t in range(self.n_tim):
             tt = t//self.t_int
@@ -229,9 +237,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                 for p in range(self.n_ant):
                     for q in range(p):  #note only doing this for q < p
                         for s in range(self.n_dir):
-                            #Get per direction and antenna gains.
-                            #gp = self.gains[s, 0, f, p] ##a single solution interval for gains!
-                            #gqH = np.conj(self.gains[s, 0, f, q])
                             #Subtract model for each direction.
                             residual[0, t, f, p, q] -= gains[s, tt, ff, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, ff, q].T)
                             for k in range(self.n_cor):
@@ -254,16 +259,29 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
     def get_xx_yy_residual(self, residual):
         """
-        Extract only the XX and YY components from the residuals.
+        This function extracts the XX and YY components only from the residuals and
+        returns the new residuals.
+    
+        Args:
+            residual (np.array):
+                Array of shape (n_mod, n_tim, n_fre, n_ant, n_ant, n_cor, n_cor)
+                containing the residual visibilities.
+        
+        Returns:
+            new_residual (np.array):
+                Array of shape (n_mod*n_tim*n_fre*n_ant*n_ant*n_cor) containing 
+                the residual visibilities for only XX and YY terms.
 
         """
 
-        new_residual = np.zeros((self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor), dtype=self.dtype)
+        ##Initialise new_residual since we are dealing with diagonal data and needs
+        ##to match with the shape of the Jacobian
+        new_residual = np.zeros((self.n_mod*self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor), dtype=self.dtype)
 
         for k in range(self.n_cor):
             new_residual[..., k] = residual[..., k, k]
 
-        return new_residual.reshape(self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor)
+        return new_residual.reshape(self.n_mod*self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor)
 
     def compute_blockwise_jhj(self, jac):
         """
