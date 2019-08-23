@@ -107,7 +107,7 @@ sources = _normalise(sources)
 
 class ParametrisedPhaseMachine(PerIntervalGains):
     """
-    This class implements the phase-only parametrised gain machine.
+    This class implements the phase-only parametrised gain machine (diag-diag).
 
     """
 
@@ -144,23 +144,22 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         self.n_param = options.get("pphase-nparam", 3)
         self.jhj_diag = options.get("pphase-diag-jhj", True)
         #print("{} nparam".format(self.n_param)>>log(2))
-         
         #self.l = options["pphase-l"]
         #self.m = options["pphase-m"]
         self.l = sources[:, 1]
         self.m = sources[:, 2]
         self.n_dir = sources.shape[0]
 
-        ##What is our initial guess alpha0 (use alpha for convenience sake)?
+        ##Initial guess alpha0 (use alpha for convenience sake).
         np.random.seed(3)
-    
         self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
         #self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
 
-        ##What about the basis?
+        ##I am making basis an attribute so that it is easier to compute gains
+        ##inside implement_update().
         self.basis = _get_basis(self.n_param, sources)
 
-        self.gains = self.make_gains()
+        self.make_gains()
 
         self._labels = dict(phase=0, param=1)
         self.param_shape = [self.n_timint, self.n_freint, 
@@ -168,21 +167,18 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         self.posterior_alpha_error = None
 
-        self.residuals = np.empty_like(data_arr)
+        #self.residuals = np.empty_like(data_arr)
 
     def make_gains(self):
         """
-        Returns the gains of shape (n_dir, n_ant) using alpha (array containing gain
-        parameters per antenna).
+        Returns the gains using alpha (array containing gain parameters per antenna
+        per correlation).
 
         """ 
 
-        #Initialise gains.
-        #self.gains = np.zeros((self.n_dir, self.n_timint, self.n_fre, self.n_ant, self.n_cor, self.n_cor), dtype=self.dtype)
-
         for s in range(self.n_dir):
             for t in range(self.n_timint):
-                for f in range(self.n_fre):
+                for f in range(self.n_freint):
                     for p in range(self.n_ant):
                         #To correct the dimension issue ((n_param,) instead of (n_param, 1)).
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
@@ -191,7 +187,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                         self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * np.dot(alpha_vec0, self.basis[:, s]))
                         self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s]))
 
-        return self.gains
 
     @classmethod
     def determine_diagonality(cls, options):
@@ -206,7 +201,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
     
     def compute_jacobian_residual(self, data_arr, model_arr, gains):
         """
-        Returns the Jacobian and the residual.
+        Returns the Jacobian and residual.
 
         """
 
@@ -350,7 +345,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         self.alpha += delta_alpha
 
         # Need to turn updated parameters into gains.
-        self.gains = self.make_gains()
+        self.make_gains()
 
         #self.alpha = self.alpha.real
         np.save("alpha.npy", self.alpha)
