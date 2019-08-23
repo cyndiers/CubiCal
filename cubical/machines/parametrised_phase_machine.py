@@ -286,13 +286,22 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
     def compute_blockwise_jhj(self, jac):
         """
-        Instead of now computing the whole jhj, I want to use this function to compute 
-        only the block diagonal entries of jhj I need.
+        This function is relevant when one wants to compute the update using only
+        the block diagonal of the JHJ. For now, the whole JHJ is being stored despite
+        the zero entries.
+
+        Args:
+            jac (np.array):
+                Array of shape (n_tim*n_fre*n_ant*n_ant*n_cor, n_ant*n_param*n_cor)
+                containing the Jacobian.
+        
+        Returns:
+            jhj (np.array):
+                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing 
+                JHJ.
 
         """
 
-        ##The Jacobian is a 2D array with n_rows = n_tim*n_fre*n_ant*n_ant and n_cols =
-        #n_ant*n_params.
         ##Get the conjugate transpose of the Jacobian.
         jh = np.conjugate(jac.T)
 

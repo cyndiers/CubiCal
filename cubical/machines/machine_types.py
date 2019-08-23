@@ -2,6 +2,7 @@ from . import complex_2x2_machine
 from . import complex_W_2x2_machine
 from . import phase_diag_machine
 from . import slope_machine
+from . import parametrised_phase_machine
 
 
 # this provides a map from string "Jones type" identifiers to specific GainMachine classes
@@ -13,7 +14,8 @@ GAIN_MACHINE_TYPES = {
     'robust-2x2': complex_W_2x2_machine.ComplexW2x2Gains,
     'f-slope': slope_machine.PhaseSlopeGains,
     't-slope': slope_machine.PhaseSlopeGains,
-    'tf-plane': slope_machine.PhaseSlopeGains
+    'tf-plane': slope_machine.PhaseSlopeGains,
+    'param-phase': parametrised_phase_machine.ParametrisedPhaseMachine
 }
 
 def get_machine_class(typestr):
