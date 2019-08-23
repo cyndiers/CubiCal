@@ -264,8 +264,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
     
         Args:
             residual (np.array):
-                Array of shape (n_mod, n_tim, n_fre, n_ant, n_ant, n_cor, n_cor)
-                containing the residual visibilities.
+                Array of shape (n_tim, n_fre, n_ant, n_ant, n_cor, n_cor)
+                containing the residual visibilities. The n_mod dimension has not 
+                been considered.
         
         Returns:
             new_residual (np.array):
@@ -276,12 +277,12 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         ##Initialise new_residual since we are dealing with diagonal data and needs
         ##to match with the shape of the Jacobian
-        new_residual = np.zeros((self.n_mod*self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor), dtype=self.dtype)
+        new_residual = np.zeros((self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor), dtype=self.dtype)
 
         for k in range(self.n_cor):
             new_residual[..., k] = residual[..., k, k]
 
-        return new_residual.reshape(self.n_mod*self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor)
+        return new_residual.reshape(self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor)
 
     def compute_blockwise_jhj(self, jac):
         """
