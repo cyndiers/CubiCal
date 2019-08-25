@@ -315,28 +315,40 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
     def compute_js(self, data_arr, model_arr):
         """
-        Compute the different components for the update rule.
+        This function computes the components JHJ and JHr for the update rule.
+        JHJ can be computed either entirely or block diagonally.
+
+        Args:
+            data_arr (np.array):
+                Array containing observed visibilities.
+            model_arr (np.array):
+                Array containing model visibilities.
+
+        
+        Returns:
+            jhj (np.array):
+                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing 
+                JHJ.
+            jhr (np.array):
+                Array of shape (n_ant*n_param*n_cor) containing JHr.
 
         """
-        #print("I am inside compute_js()!!!!!!!")
-       # PerIntervalGains.precompute_attributes(self, data_arr, model_arr, flags_arr, inv_var_chan)
 
         #import pdb; pdb.set_trace()
 
         jac, residual_2x2 = self.compute_jacobian_residual(data_arr, model_arr, self.gains)
+        #Change shape of residual to match the second axis of JH.
         residual = self.get_xx_yy_residual(residual_2x2)
 
         jh = np.conjugate(jac.T)
 
-        #solve  = "block_diag_jhj" #"full_jhj"
-
         if self.jhj_diag: #solve == "block_diag_jhj":
             jhj = self.compute_blockwise_jhj(jac)
 
-        else:
+        else: #using full JHJ.
             jhj = np.dot(jh, jac)
 
-        
+        ##Initialise JHr.
         jhr = np.zeros((self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
         jhr = np.dot(jh, residual)
 
@@ -347,35 +359,46 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         Internal method implementing a parameter update. The standard compute_update() implementation 
         calls compute_jacobian_residual() and _implement_update() at each iteration step.
 
-        I want to make a function which outputs the update, by computing the inverse
-        of the main diagonal blocks only.
+        Args:
+            jhr (np.array):
+                Array containing JHr.
+            jhj (np.array):
+                Array containing model JHJ.
+
         
+        Updates:
+            alpha (np.array):
+                Array containing current gain parameters.
+            gains (np.array):
+                Array containing current gain estimates computed using updated alpha.
+
         """
 
         #import pdb; pdb.set_trace()
 
-        #solve  = "block_diag_jhj" #"full_jhj"
-
         if self.jhj_diag:
-            ##How do you get the diagonal block of the jhj?
-            ##Initialise change in alpha.
+            ##Initialise delta_alpha = change in alpha.
             delta_alpha = np.zeros((self.n_ant, self.n_param*self.n_cor), dtype=self.alpha.dtype)
 
             for k in range(self.n_ant):
+                ##Each block_jhj has shape (n_param*n_cor, n_param*n_cor) contains 
+                ##the derivatives of data_arr w.r.t. alpha @ant k. 
                 block_jhj = jhj[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor]
+                #And thus, delta_alpha is computed for each antenna at a time.
                 delta_alpha[k] = (np.linalg.solve(block_jhj, jhr[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor])).real
         
         else:
+            #In the case of full JHJ, delta_alpha gets computed at once unlike above.
             delta_alpha = np.linalg.solve(jhj, jhr)
+            #alpha is real and it is required to use real delta_alpha.
             delta_alpha = np.real(delta_alpha)
 
         delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor)) 
         self.alpha += delta_alpha
 
-        # Need to turn updated parameters into gains.
+        #Need to turn updated parameters into gains.
         self.make_gains()
 
-        #self.alpha = self.alpha.real
         np.save("alpha.npy", self.alpha)
         np.save("gains_lm.npy", self.gains)
 
@@ -383,16 +406,24 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         #chi2 = (np.linalg.norm(self.residual)) / chisq_num
         #log(2).print("chi2 = {}".format(chi2))
 
-    def compute_update(self, model_arr, obser_arr):
+    def compute_update(self, model_arr, data_arr):
         """
-        This method is expected to compute the parameter update. 
+        This function calls implement_update() and computes the update rule.
+
+        Args:
+            model_arr (np.array):
+                Array containing model visibilities.
+            data_arr (np.array):
+                Array containing observed visibilities. 
     
         """
 
         #import pdb; pdb.set_trace()
-    
-        jhj, jhr = self.compute_js(obser_arr, model_arr)
+        
+        #Get JHJ and JHr to compute the update rule.
+        jhj, jhr = self.compute_js(data_arr, model_arr)
 
+        #Updates the gain parameters and also computes the new gains.
         self.implement_update(jhr, jhj)
 
     @staticmethod
