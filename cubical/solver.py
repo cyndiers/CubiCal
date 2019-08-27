@@ -129,6 +129,7 @@ def _solve_gains(gm, stats, madmax, obser_arr, model_arr, flags_arr, sol_opts, l
     
     update_stats(flags_arr, ('initchi2', 'chi2'))
 
+
     # Initialize a residual array.
 
     resid_shape = [gm.n_mod, gm.n_tim, gm.n_fre, gm.n_ant, gm.n_ant, gm.n_cor, gm.n_cor]

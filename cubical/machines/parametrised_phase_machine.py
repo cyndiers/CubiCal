@@ -423,6 +423,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         #Get JHJ and JHr to compute the update rule.
         jhj, jhr = self.compute_js(data_arr, model_arr)
 
+        ##I want to save Re(JHJ).
+        np.save("re_jhj.npy", jhj.real)
+
         #Updates the gain parameters and also computes the new gains.
         self.implement_update(jhr, jhj)
 
