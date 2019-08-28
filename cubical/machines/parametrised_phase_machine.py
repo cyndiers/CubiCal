@@ -196,7 +196,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         for s in range(self.n_dir):
             for t in range(self.n_timint):
-                for f in range(self.n_freint):
+                for f in range(self.n_fre):
                     for p in range(self.n_ant):
                         #To correct for the dimension issue ((n_param,) instead of (n_param, 1)).
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
@@ -256,14 +256,14 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                     for q in range(p):  #note only doing this for q < p
                         for s in range(self.n_dir):
                             #Subtract model for each direction.
-                            residual[0, t, f, p, q] -= gains[s, tt, ff, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, ff, q].T)
+                            residual[0, t, f, p, q] -= gains[s, tt, f, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, f, q].T)
                             for k in range(self.n_cor):
                                 #Get Jacobian.
                                 for param in range(self.n_param):
                                     #Get partial derivative of the phase.
                                     dphidalpha = 1.0j*self.basis[param, s]/self.chunk_fs[f]
-                                    jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k]) #I do not need to transpose gains_q (scalar).
-                                    jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k])
+                                    jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k]) #I do not need to transpose gains_q (scalar).
+                                    jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k])
 
                         #Set [q,p] element as conjugate of [p,q] (LB - is this correct for the Jacobian as well?)
                         residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
