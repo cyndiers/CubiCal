@@ -172,6 +172,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         ##inside implement_update().
         self.basis = _get_basis(self.n_param, sources)
 
+        #import pdb; pdb.set_trace()
+        self.chunk_fs = _normalise(chunk_fs, self.ftype)
+
         self.make_gains()
 
         self._labels = dict(phase=0, param=1)
@@ -182,8 +185,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         self.residuals = np.empty_like(data_arr)
         
-        #import pdb; pdb.set_trace()
-        self.chunk_fs = _normalise(chunk_fs, self.ftype)
 
     def make_gains(self):
         """
@@ -200,8 +201,8 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
                         alpha_vec1 = (self.alpha[p, :, 1]).reshape(self.n_param)
                         #phase_equation = np.dot(alpha_vec, basis[:, s])
-                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * (np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f]).astype(self.dtype))
-                        self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s]))
+                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * (np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f]).astype(self.ftype))
+                        self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * (np.dot(alpha_vec1, self.basis[:, s])/self.chunk_fs[f]).astype(self.ftype))
 
     @classmethod
     def determine_diagonality(cls, options):
