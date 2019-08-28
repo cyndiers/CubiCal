@@ -167,12 +167,13 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         np.random.seed(3)
         self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
         #self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
+        #self.alpha[:, 0, :] = 1
 
         ##I am making basis an attribute so that it is easier to compute gains
         ##inside implement_update().
         self.basis = _get_basis(self.n_param, sources)
 
-        import pdb; pdb.set_trace()
+        #import pdb; pdb.set_trace()
         self.chunk_fs = _normalise(chunk_fs, self.ftype)
 
         self.make_gains()
@@ -411,7 +412,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             delta_alpha = np.real(delta_alpha)
 
         delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor)) 
-        self.alpha += delta_alpha
+        self.alpha += 0.5*delta_alpha
 
         #Need to turn updated parameters into gains.
         self.make_gains()
