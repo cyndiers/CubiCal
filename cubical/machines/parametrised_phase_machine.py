@@ -12,7 +12,20 @@ import cubical.kernels
 from cubical.tools import logger
 log = logger.getLogger("solver") #pphase
 
-def _normalise(sources):
+def _normalise(x, dtype):
+    """
+    Helper function: normalises array to [0,1] interval.
+
+    """
+
+    if len(x) > 1:
+        return (x/min(x)).astype(dtype)
+    elif len(x) == 1:
+        return np.ones(1, dtype)
+    else:
+        return x
+
+def _normalise_lm(sources):
     """
     Helper function: normalizes (sources) array to [0,1] deg range.
     
@@ -101,7 +114,7 @@ sources = np.array([[  1.00000000e+00,   3.83510434e-16,   0.00000000e+00],
        [  1.00000000e+00,   5.23598776e-03,  -1.04719755e-02],
        [  1.00000000e+00,   6.98131701e-03,   8.72664626e-03],
        [  1.00000000e+00,  -8.72664626e-03,  -8.72664626e-03]])
-sources = _normalise(sources)
+sources = _normalise_lm(sources)
 
 #*************************************************************************************************
 
@@ -167,7 +180,10 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         self.posterior_alpha_error = None
 
-        #self.residuals = np.empty_like(data_arr)
+        self.residuals = np.empty_like(data_arr)
+        
+        #import pdb; pdb.set_trace()
+        self.chunk_fs = _normalise(chunk_fs, self.ftype)
 
     def make_gains(self):
         """
@@ -184,7 +200,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
                         alpha_vec1 = (self.alpha[p, :, 1]).reshape(self.n_param)
                         #phase_equation = np.dot(alpha_vec, basis[:, s])
-                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * np.dot(alpha_vec0, self.basis[:, s]))
+                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * (np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f]).astype(self.dtype))
                         self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s]))
 
     @classmethod
