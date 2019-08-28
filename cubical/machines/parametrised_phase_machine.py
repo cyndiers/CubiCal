@@ -172,7 +172,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         ##inside implement_update().
         self.basis = _get_basis(self.n_param, sources)
 
-        #import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         self.chunk_fs = _normalise(chunk_fs, self.ftype)
 
         self.make_gains()
@@ -260,7 +260,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                                 #Get Jacobian.
                                 for param in range(self.n_param):
                                     #Get partial derivative of the phase.
-                                    dphidalpha = 1.0j*self.basis[param, s]
+                                    dphidalpha = 1.0j*self.basis[param, s]/self.chunk_fs[ff].astype(self.ftype)
                                     jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k]) #I do not need to transpose gains_q (scalar).
                                     jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k])
 
