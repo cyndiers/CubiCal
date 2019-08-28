@@ -201,15 +201,15 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
                         alpha_vec1 = (self.alpha[p, :, 1]).reshape(self.n_param)
                         #phase_equation = np.dot(alpha_vec, basis[:, s])
-                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * (np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f]).astype(self.ftype))
-                        self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * (np.dot(alpha_vec1, self.basis[:, s])/self.chunk_fs[f]).astype(self.ftype))
+                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f])
+                        self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s])/self.chunk_fs[f])
 
     @classmethod
     def determine_diagonality(cls, options):
         """Returns true if the machine class, given the options, represents a diagonal gain"""
         return False
 
-    @property
+    @property 
     def dof_per_antenna(self):
         """This property returns the number of real degrees of freedom per antenna, per solution interval"""
         ##Assuming diagonal gains!
@@ -260,7 +260,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                                 #Get Jacobian.
                                 for param in range(self.n_param):
                                     #Get partial derivative of the phase.
-                                    dphidalpha = 1.0j*self.basis[param, s]/self.chunk_fs[ff].astype(self.ftype)
+                                    dphidalpha = 1.0j*self.basis[param, s]/self.chunk_fs[f]
                                     jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k]) #I do not need to transpose gains_q (scalar).
                                     jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k])
 
