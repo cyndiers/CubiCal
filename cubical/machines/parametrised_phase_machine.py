@@ -15,7 +15,7 @@ log = logger.getLogger("solver") #pphase
 def _normalise(sources):
     """
     Helper function: normalizes (sources) array to [0,1] deg range.
-    
+
     Since I am having very small l and m values with respect to a 1 deg field of view,
     I want to normalise the l and m coordinates such that they do appear bigger and scale up
     to a common sky at the end of the day.
@@ -25,20 +25,22 @@ def _normalise(sources):
     l = sources[:, 1]
     m = sources[:, 2]
 
-    min_l = np.min(l)
-    min_m = np.min(m)
-    max_l = np.max(l)
-    max_m = np.max(m)
+    # min_l = np.min(l)
+    # min_m = np.min(m)
+    max_l = np.max(np.abs(l))
+    max_m = np.max(np.abs(m))
+    max_lm = np.max([max_l, max_m])
+    print(max_lm)
 
-    diag_length = np.sqrt((max_l-min_l)**2 + (max_m-min_m)**2)
+    # diag_length = np.sqrt((max_l-min_l)**2 + (max_m-min_m)**2)
 
-    normalised_l = (l-min_l)/diag_length
-    normalised_m = (m-min_m)/diag_length
+    normalised_l = l/max_lm
+    normalised_m = m/max_lm
 
     ##Keep same phase centre or not?
     #normalised_l -= normalised_l[0]
     #normalised_m -= normalised_m[0]
-    
+
     sources[:, 1] = normalised_l
     sources[:, 2] = normalised_m
 
@@ -46,12 +48,12 @@ def _normalise(sources):
 
 def _make_basis_vec(n_param, l_s, m_s):
     """
-    Generating the basis polynomial to compute the phase equation. Right now, 
-    it is of the form [1, l_s, m_s, l_s**2, m_s**2, ...] with l_s and m_s being 
+    Generating the basis polynomial to compute the phase equation. Right now,
+    it is of the form [1, l_s, m_s, l_s**2, m_s**2, ...] with l_s and m_s being
     scalars. The function returns a vector of length n_params.
 
     """
-    
+
     N = (n_param+1) // 2
     lvec = (np.tile(l_s, N-1) ** np.arange(1, N))
     mvec = (np.tile(m_s, N-1) ** np.arange(1, N))
@@ -60,14 +62,14 @@ def _make_basis_vec(n_param, l_s, m_s):
     main_vec[:, 0] = lvec
     main_vec[:, 1] = mvec
     main_vec = (main_vec).flatten()
-    
+
     return np.insert(main_vec, 0, [1])
 
 def _get_basis(n_param, sources):
     """
     Get basis matrix of shape (n_params, n_dir). Both l and m, which represent the
     direction cosine coordinates of the sources are each vectors of length n_dir.
-    
+
     """
 
     #Get the dimension and the direction cosines.
@@ -92,8 +94,8 @@ except AttributeError:
     builtins.profile = profile
 
 #*************************************************************************************************
-#sources = np.array([[1, 0, 0], [1, np.deg2rad(0.77), np.deg2rad(1)], 
-#                    [1, np.deg2rad(-0.3), np.deg2rad(-0.6)], [1, np.deg2rad(-0.4), np.deg2rad(0.5)], 
+#sources = np.array([[1, 0, 0], [1, np.deg2rad(0.77), np.deg2rad(1)],
+#                    [1, np.deg2rad(-0.3), np.deg2rad(-0.6)], [1, np.deg2rad(-0.4), np.deg2rad(0.5)],
 #                    [1, np.deg2rad(0.5), np.deg2rad(-0.5)]])
 
 sources = np.array([[  1.00000000e+00,   3.83510434e-16,   0.00000000e+00],
@@ -102,6 +104,8 @@ sources = np.array([[  1.00000000e+00,   3.83510434e-16,   0.00000000e+00],
        [  1.00000000e+00,   6.98131701e-03,   8.72664626e-03],
        [  1.00000000e+00,  -8.72664626e-03,  -8.72664626e-03]])
 sources = _normalise(sources)
+
+print(sources)
 
 #*************************************************************************************************
 
@@ -114,15 +118,15 @@ class ParametrisedPhaseMachine(PerIntervalGains):
     def __init__(self, label, data_arr, ndir, nmod, chunk_ts, chunk_fs, chunk_label, options):
         """
         Initialises a phase-only parametrised gain machine.
-        
+
         **Must modify the arguments!**
 
         Args:
             label (str):
                 Label identifying the Jones term.
-            data_arr (np.ndarray): 
-                Shape (n_mod, n_tim, n_fre, n_ant, n_ant, n_cor, n_cor) array containing observed 
-                visibilities. 
+            data_arr (np.ndarray):
+                Shape (n_mod, n_tim, n_fre, n_ant, n_ant, n_cor, n_cor) array containing observed
+                visibilities.
             ndir (int):
                 Number of directions.
             nmod (nmod):
@@ -131,12 +135,12 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                 Times for the data being processed.
             chunk_fs (np.ndarray):
                 Frequencies for the data being processsed.
-            options (dict): 
+            options (dict):
                 Dictionary of options.
 
         """
         PerIntervalGains.__init__(self, label, data_arr, ndir, nmod,
-                                  chunk_ts, chunk_fs, chunk_label, options) 
+                                  chunk_ts, chunk_fs, chunk_label, options)
 
         #import pdb; pdb.set_trace()
 
@@ -152,8 +156,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         ##Initial guess alpha0 (use alpha for convenience sake).
         np.random.seed(3)
-        self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
-        #self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
+        # self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
+        self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
+        self.alpha[:,0,:] = 1
 
         ##I am making basis an attribute so that it is easier to compute gains
         ##inside implement_update().
@@ -162,19 +167,19 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         self.make_gains()
 
         self._labels = dict(phase=0, param=1)
-        self.param_shape = [self.n_timint, self.n_freint, 
+        self.param_shape = [self.n_timint, self.n_freint,
                             self.n_ant, self.n_param, self.n_cor, self.n_cor]
 
         self.posterior_alpha_error = None
 
-        #self.residuals = np.empty_like(data_arr)
+        self.residuals = np.empty_like(data_arr)
 
     def make_gains(self):
         """
         Returns the gains using alpha (array containing gain parameters per antenna
         per correlation).
 
-        """ 
+        """
 
         for s in range(self.n_dir):
             for t in range(self.n_timint):
@@ -197,11 +202,11 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         """This property returns the number of real degrees of freedom per antenna, per solution interval"""
         ##Assuming diagonal gains!
         return self.n_param*2
-    
+
     def compute_jacobian_residual(self, data_arr, model_arr, gains):
         """
         Returns the Jacobian and residual.
-    
+
         Args:
             data_arr (np.array):
                 Array containing the observed visibilities.
@@ -209,23 +214,26 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                 Array containing the model visibilities.
             gains (np.array):
                 Array containing the current gain estimates.
-        
+
         Returns:
             jac (np.array):
                 Array of shape (n_tim, n_fre, n_ant, n_ant, n_cor, n_ant, n_param, n_cor)
                 containing the Jacobian.
             residual (np.array):
                 Array containing the residual visibilities.
-            
+
         """
 
+        # print(model_arr.shape, data_arr.shape)
+
         #Initialise Jacobian.
-        self.jac_shape = [self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor, self.n_ant, self.n_param, self.n_cor] 
+        self.jac_shape = [self.n_tim, self.n_fre, self.n_ant, self.n_ant,
+                          self.n_cor, self.n_ant, self.n_param, self.n_cor]
         jac = np.zeros(self.jac_shape, dtype=self.dtype)
 
         #----using cubical-----------#
         ##Need to check this with Jonathan!
-        #self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
+        # self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
 
         #Initialise residual as data since we just need to subtract the model in every direction.
         residual = data_arr.copy()
@@ -250,7 +258,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                         #Set [q,p] element as conjugate of [p,q] (LB - is this correct for the Jacobian as well?)
                         residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
                         jac[t, f, q, p] = np.conj(jac[t, f, p, q])
-    
+
+        # print(model_arr[0,0,0,0,0,1])
+
         ##Reshape the Jacobian to a 2D shape and residuals to 1D.
         jac = np.reshape(jac, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor, self.n_ant*self.n_param*self.n_cor))
         #self.residual = np.reshape(self.residual, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor*self.n_cor))
@@ -261,16 +271,16 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         """
         This function extracts the XX and YY components only from the residuals and
         returns the new residuals.
-    
+
         Args:
             residual (np.array):
                 Array of shape (n_tim, n_fre, n_ant, n_ant, n_cor, n_cor)
-                containing the residual visibilities. The n_mod dimension has not 
+                containing the residual visibilities. The n_mod dimension has not
                 been considered.
-        
+
         Returns:
             new_residual (np.array):
-                Array of shape (n_mod*n_tim*n_fre*n_ant*n_ant*n_cor) containing 
+                Array of shape (n_mod*n_tim*n_fre*n_ant*n_ant*n_cor) containing
                 the residual visibilities for only XX and YY terms.
 
         """
@@ -279,8 +289,8 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         ##to match with the shape of the Jacobian
         new_residual = np.zeros((self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor), dtype=self.dtype)
 
-        for k in range(self.n_cor):
-            new_residual[..., k] = residual[..., k, k]
+        new_residual[..., 0] = residual[0, ..., 0, 0]
+        new_residual[..., 1] = residual[0, ..., 1, 1]
 
         return new_residual.reshape(self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor)
 
@@ -294,10 +304,10 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             jac (np.array):
                 Array of shape (n_tim*n_fre*n_ant*n_ant*n_cor, n_ant*n_param*n_cor)
                 containing the Jacobian.
-        
+
         Returns:
             jhj (np.array):
-                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing 
+                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing
                 JHJ.
 
         """
@@ -310,7 +320,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         for k in range(self.n_ant):
             jhj[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor] = np.dot(jh[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, :], jac[:, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor])
-        
+
         return jhj
 
     def compute_js(self, data_arr, model_arr):
@@ -324,10 +334,10 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             model_arr (np.array):
                 Array containing model visibilities.
 
-        
+
         Returns:
             jhj (np.array):
-                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing 
+                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing
                 JHJ.
             jhr (np.array):
                 Array of shape (n_ant*n_param*n_cor) containing JHr.
@@ -340,13 +350,23 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         #Change shape of residual to match the second axis of JH.
         residual = self.get_xx_yy_residual(residual_2x2)
 
+        print(model_arr[:,0,0,0,0,1])
+        # print(jac.shape)
+
         jh = np.conjugate(jac.T)
+
+        # print(jac, jh)
 
         if self.jhj_diag: #solve == "block_diag_jhj":
             jhj = self.compute_blockwise_jhj(jac)
+            # np.save("blockwise_jhj", jhj)
 
         else: #using full JHJ.
-            jhj = np.dot(jh, jac)
+            jhj = np.dot(jh, jac) # It is possible that this is wrong. Diag
+                                  # entries agree but not sure about off-diag.
+            np.save("full_jhj", jhj)
+
+            print(np.linalg.matrix_rank(jhj))
 
         ##Initialise JHr.
         jhr = np.zeros((self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
@@ -356,7 +376,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
     def implement_update(self, jhr, jhj):
         """
-        Internal method implementing a parameter update. The standard compute_update() implementation 
+        Internal method implementing a parameter update. The standard compute_update() implementation
         calls compute_jacobian_residual() and _implement_update() at each iteration step.
 
         Args:
@@ -365,7 +385,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             jhj (np.array):
                 Array containing model JHJ.
 
-        
+
         Updates:
             alpha (np.array):
                 Array containing current gain parameters.
@@ -381,20 +401,24 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             delta_alpha = np.zeros((self.n_ant, self.n_param*self.n_cor), dtype=self.alpha.dtype)
 
             for k in range(self.n_ant):
-                ##Each block_jhj has shape (n_param*n_cor, n_param*n_cor) contains 
-                ##the derivatives of data_arr w.r.t. alpha @ant k. 
+                ##Each block_jhj has shape (n_param*n_cor, n_param*n_cor) contains
+                ##the derivatives of data_arr w.r.t. alpha @ant k.
                 block_jhj = jhj[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor]
                 #And thus, delta_alpha is computed for each antenna at a time.
                 delta_alpha[k] = (np.linalg.solve(block_jhj, jhr[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor])).real
-        
+
         else:
             #In the case of full JHJ, delta_alpha gets computed at once unlike above.
+            # delta_alpha = np.linalg.inv(jhj).dot(jhr)
             delta_alpha = np.linalg.solve(jhj, jhr)
+            #print(delta_alpha)
             #alpha is real and it is required to use real delta_alpha.
             delta_alpha = np.real(delta_alpha)
 
-        delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor)) 
-        self.alpha += delta_alpha
+        delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor))
+        self.alpha += 0.5*delta_alpha
+        # print(self.alpha)
+
 
         #Need to turn updated parameters into gains.
         self.make_gains()
@@ -414,12 +438,13 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             model_arr (np.array):
                 Array containing model visibilities.
             data_arr (np.array):
-                Array containing observed visibilities. 
-    
+                Array containing observed visibilities.
+
         """
+        #print("Here!")
 
         #import pdb; pdb.set_trace()
-        
+
         #Get JHJ and JHr to compute the update rule.
         jhj, jhr = self.compute_js(data_arr, model_arr)
 
@@ -439,7 +464,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             "params": (0., ("nparams", "time", "freq", "ant", "corr")),
             "params.err": (0., ("time", "freq", "ant", "params")),
         })
-        
+
         return exportables
 
     def export_solutions(self):
