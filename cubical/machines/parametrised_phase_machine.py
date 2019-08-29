@@ -57,6 +57,38 @@ def _normalise_lm(sources):
 
     return sources
 
+def _new_normalise(sources):
+    """
+    I want to make a new normalisation function to make l and m fit in [-1, 1].
+    
+    """
+    
+    l = sources[:, 1]
+    m = sources[:, 2]
+
+    min_l = min(np.abs(l))
+    min_m = min(np.abs(m))
+    max_l = max(np.abs(l))
+    max_m = max(np.abs(m))
+    
+    if min_l < min_m:
+        mini = min_l
+    else:
+        mini = min_m
+        
+    if max_l < max_m:
+        maxi = max_m
+    else:
+        maxi = max_l
+    
+    normalised_l = (l - mini)/(maxi - mini)
+    normalised_m = (m - mini)/(maxi - mini)
+
+    sources[:, 1] = normalised_l
+    sources[:, 2] = normalised_m
+
+    return sources
+
 def _make_basis_vec(n_param, l_s, m_s):
     """
     Generating the basis polynomial to compute the phase equation. Right now, 
@@ -114,7 +146,8 @@ sources = np.array([[  1.00000000e+00,   3.83510434e-16,   0.00000000e+00],
        [  1.00000000e+00,   5.23598776e-03,  -1.04719755e-02],
        [  1.00000000e+00,   6.98131701e-03,   8.72664626e-03],
        [  1.00000000e+00,  -8.72664626e-03,  -8.72664626e-03]])
-sources = _normalise_lm(sources)
+#sources = _normalise_lm(sources)
+sources = _new_normalise(sources)
 
 #*************************************************************************************************
 
@@ -165,15 +198,14 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         ##Initial guess alpha0 (use alpha for convenience sake).
         np.random.seed(3)
-        self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
-        #self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
+        #self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
+        self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
         #self.alpha[:, 0, :] = 1
 
         ##I am making basis an attribute so that it is easier to compute gains
         ##inside implement_update().
         self.basis = _get_basis(self.n_param, sources)
 
-        #import pdb; pdb.set_trace()
         self.chunk_fs = _normalise(chunk_fs, self.ftype)
 
         self.make_gains()
@@ -186,7 +218,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         self.residuals = np.empty_like(data_arr)
         
-
     def make_gains(self):
         """
         Returns the gains using alpha (array containing gain parameters per antenna
@@ -202,6 +233,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                         alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
                         alpha_vec1 = (self.alpha[p, :, 1]).reshape(self.n_param)
                         #phase_equation = np.dot(alpha_vec, basis[:, s])
+                        #We want to vary the gains with frequency, and thus, indexing within n_fre instead of n_freint.
                         self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f])
                         self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s])/self.chunk_fs[f])
 
@@ -251,7 +283,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         for t in range(self.n_tim):
             tt = t//self.t_int
             for f in range(self.n_fre):
-                ff = f//self.f_int
                 for p in range(self.n_ant):
                     for q in range(p):  #note only doing this for q < p
                         for s in range(self.n_dir):
@@ -273,7 +304,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         jac = np.reshape(jac, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor, self.n_ant*self.n_param*self.n_cor))
         #self.residual = np.reshape(self.residual, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor*self.n_cor))
 
-        return jac, residual
+        return jac, residual #self.residuals
 
     def get_xx_yy_residual(self, residual):
         """
