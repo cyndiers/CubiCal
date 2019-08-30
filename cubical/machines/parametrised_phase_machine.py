@@ -110,7 +110,7 @@ def _make_basis_vec(n_param, l_s, m_s):
 
 def _get_basis(n_param, sources):
     """
-    Get basis matrix of shape (n_params, n_dir). Both l and m, which represent the
+    Get basis matrix of shape (n_param, n_dir). Both l and m, which represent the
     direction cosine coordinates of the sources are each vectors of length n_dir.
     
     """
@@ -198,9 +198,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         ##Initial guess alpha0 (use alpha for convenience sake).
         np.random.seed(3)
-        #self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
-        self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
-        #self.alpha[:, 0, :] = 1
+        #self.alpha = 0.05*np.random.randn(self.n_timint, self.n_ant, self.n_param, self.n_cor)
+        self.alpha = np.zeros((self.n_timint, self.n_ant, self.n_param, self.n_cor))
+        #self.alpha[:, :, 0, :] = 1
 
         ##I am making basis an attribute so that it is easier to compute gains
         ##inside implement_update().
@@ -229,13 +229,11 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             for t in range(self.n_timint):
                 for f in range(self.n_fre):
                     for p in range(self.n_ant):
-                        #To correct for the dimension issue ((n_param,) instead of (n_param, 1)).
-                        alpha_vec0 = (self.alpha[p, :, 0]).reshape(self.n_param)
-                        alpha_vec1 = (self.alpha[p, :, 1]).reshape(self.n_param)
-                        #phase_equation = np.dot(alpha_vec, basis[:, s])
-                        #We want to vary the gains with frequency, and thus, indexing within n_fre instead of n_freint.
-                        self.gains[s, t, f, p, 0, 0] = np.exp(1.0j * np.dot(alpha_vec0, self.basis[:, s])/self.chunk_fs[f])
-                        self.gains[s, t, f, p, 1, 1] = np.exp(1.0j * np.dot(alpha_vec1, self.basis[:, s])/self.chunk_fs[f])
+                        for k in range(self.n_cor):
+                            #To correct for the dimension issue ((n_param,) instead of (n_param, 1)).
+                            alpha_vec = (self.alpha[t, p, :, k]).reshape(self.n_param)
+                            #We want to vary the gains with frequency, and thus, indexing within n_fre instead of n_freint.
+                            self.gains[s, t, f, p, k, k] = np.exp(1.0j * np.dot(alpha_vec, self.basis[:, s])/self.chunk_fs[f])
 
     @classmethod
     def determine_diagonality(cls, options):
@@ -262,7 +260,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         
         Returns:
             jac (np.array):
-                Array of shape (n_tim, n_fre, n_ant, n_ant, n_cor, n_ant, n_param, n_cor)
+                Array of shape (n_tim, n_fre, n_ant, n_ant, n_cor, n_timint, n_ant, n_param, n_cor)
                 containing the Jacobian.
             residual (np.array):
                 Array containing the residual visibilities.
@@ -270,8 +268,8 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         """
 
         #Initialise Jacobian.
-        self.jac_shape = [self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor, self.n_ant, self.n_param, self.n_cor] 
-        jac = np.zeros(self.jac_shape, dtype=self.dtype)
+        jac_shape = [self.n_tim, self.n_fre, self.n_ant, self.n_ant, self.n_cor, self.n_timint, self.n_ant, self.n_param, self.n_cor] 
+        jac = np.zeros(jac_shape, dtype=self.dtype)
 
         #----using cubical-----------#
         ##Need to check this with Jonathan!
@@ -295,15 +293,15 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                                 for param in range(self.n_param):
                                     #Get partial derivative of the phase.
                                     dphidalpha = 1.0j*self.basis[param, s]/self.chunk_fs[f]
-                                    jac[t, f, p, q, k, p, param, k] += dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k]) #I do not need to transpose gains_q (scalar).
-                                    jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k])
+                                    jac[t, f, p, q, k, tt, p, param, k] += dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k]) #I do not need to transpose gains_q (scalar).
+                                    jac[t, f, p, q, k, tt, q, param, k] += -dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k])
 
                         #Set [q,p] element as conjugate of [p,q] (LB - is this correct for the Jacobian as well?)
                         residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
                         jac[t, f, q, p] = np.conj(jac[t, f, p, q])
     
         ##Reshape the Jacobian to a 2D shape and residuals to 1D.
-        jac = np.reshape(jac, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor, self.n_ant*self.n_param*self.n_cor))
+        jac = np.reshape(jac, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor, self.n_timint*self.n_ant*self.n_param*self.n_cor))
         #self.residual = np.reshape(self.residual, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor*self.n_cor))
 
         return jac, residual #self.residuals
@@ -343,13 +341,13 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         Args:
             jac (np.array):
-                Array of shape (n_tim*n_fre*n_ant*n_ant*n_cor, n_ant*n_param*n_cor)
+                Array of shape (n_tim*n_fre*n_ant*n_ant*n_cor, n_timint*n_ant*n_param*n_cor)
                 containing the Jacobian.
         
         Returns:
             jhj (np.array):
-                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing 
-                JHJ.
+                Array of shape (n_timint*n_ant*n_param*n_cor, n_timint*n_ant*n_param*n_cor)
+                containing JHJ.
 
         """
 
@@ -357,10 +355,13 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         jh = np.conjugate(jac.T)
 
         ##Initialise jhj.
-        jhj = np.zeros((self.n_ant*self.n_param*self.n_cor, self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
+        jhj = np.zeros((self.n_timint*self.n_ant*self.n_param*self.n_cor, self.n_timint*self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
 
-        for k in range(self.n_ant):
-            jhj[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor] = np.dot(jh[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, :], jac[:, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor])
+        n_parcor = self.n_param*self.n_cor
+
+        for k in range(self.n_timint*self.n_ant):
+            jhj[k*n_parcor:(k+1)*n_parcor, k*n_parcor:(k+1)*n_parcor] = \
+                np.dot(jh[k*n_parcor:(k+1)*n_parcor, :], jac[:, k*n_parcor:(k+1)*n_parcor])
         
         return jhj
 
@@ -378,10 +379,10 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         
         Returns:
             jhj (np.array):
-                Array of shape (n_ant*n_param*n_cor, n_ant*n_param*n_cor) containing 
+                Array of shape (n_timint*n_ant*n_param*n_cor, n_timint*n_ant*n_param*n_cor) containing 
                 JHJ.
             jhr (np.array):
-                Array of shape (n_ant*n_param*n_cor) containing JHr.
+                Array of shape (n_timint*n_ant*n_param*n_cor) containing JHr.
 
         """
 
@@ -400,7 +401,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             jhj = np.dot(jh, jac)
 
         ##Initialise JHr.
-        jhr = np.zeros((self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
+        jhr = np.zeros((self.n_timint*self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
         jhr = np.dot(jh, residual)
 
         return jhj, jhr
@@ -429,14 +430,16 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         if self.jhj_diag:
             ##Initialise delta_alpha = change in alpha.
-            delta_alpha = np.zeros((self.n_ant, self.n_param*self.n_cor), dtype=self.alpha.dtype)
+            delta_alpha = np.zeros((self.n_timint*self.n_ant, self.n_param*self.n_cor), dtype=self.alpha.dtype)
 
-            for k in range(self.n_ant):
+            n_parcor = self.n_param*self.n_cor
+
+            for k in range(self.n_timint*self.n_ant):
                 ##Each block_jhj has shape (n_param*n_cor, n_param*n_cor) contains 
                 ##the derivatives of data_arr w.r.t. alpha @ant k. 
-                block_jhj = jhj[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor, k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor]
+                block_jhj = jhj[k*n_parcor:(k+1)*n_parcor, k*n_parcor:(k+1)*n_parcor]
                 #And thus, delta_alpha is computed for each antenna at a time.
-                delta_alpha[k] = (np.linalg.solve(block_jhj, jhr[k*self.n_param*self.n_cor:(k+1)*self.n_param*self.n_cor])).real
+                delta_alpha[k] = (np.linalg.solve(block_jhj, jhr[k*n_parcor:(k+1)*n_parcor])).real
         
         else:
             #In the case of full JHJ, delta_alpha gets computed at once unlike above.
@@ -444,7 +447,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             #alpha is real and it is required to use real delta_alpha.
             delta_alpha = np.real(delta_alpha)
 
-        delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor))
+        delta_alpha = np.reshape(delta_alpha, (self.n_timint, self.n_ant, self.n_param, self.n_cor))
 
         if self.iters % 2 == 0:
             self.alpha += 0.5*delta_alpha
