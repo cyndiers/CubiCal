@@ -275,7 +275,9 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         #----using cubical-----------#
         ##Need to check this with Jonathan!
+        #residual = np.empty_like(data_arr)
         #self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
+        #residual_2x2 = self.compute_residual(data_arr, model_arr, residual)
 
         #Initialise residual as data since we just need to subtract the model in every direction.
         residual = data_arr.copy()
@@ -442,8 +444,12 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             #alpha is real and it is required to use real delta_alpha.
             delta_alpha = np.real(delta_alpha)
 
-        delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor)) 
-        self.alpha += 0.5*delta_alpha
+        delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor))
+
+        if self.iters % 2 == 0:
+            self.alpha += 0.5*delta_alpha
+        else:
+            self.alpha += delta_alpha
 
         #Need to turn updated parameters into gains.
         self.make_gains()
