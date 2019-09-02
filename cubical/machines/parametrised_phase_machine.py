@@ -25,21 +25,12 @@ def _normalise(sources):
     l = sources[:, 1]
     m = sources[:, 2]
 
-    # min_l = np.min(l)
-    # min_m = np.min(m)
     max_l = np.max(np.abs(l))
     max_m = np.max(np.abs(m))
     max_lm = np.max([max_l, max_m])
-    print(max_lm)
-
-    # diag_length = np.sqrt((max_l-min_l)**2 + (max_m-min_m)**2)
 
     normalised_l = l/max_lm
     normalised_m = m/max_lm
-
-    ##Keep same phase centre or not?
-    #normalised_l -= normalised_l[0]
-    #normalised_m -= normalised_m[0]
 
     sources[:, 1] = normalised_l
     sources[:, 2] = normalised_m
@@ -85,14 +76,6 @@ def _get_basis(n_param, sources):
 
     return basis
 
-import builtins
-try:
-    builtins.profile
-except AttributeError:
-    # No line profiler, provide a pass-through version
-    def profile(func): return func
-    builtins.profile = profile
-
 #*************************************************************************************************
 #sources = np.array([[1, 0, 0], [1, np.deg2rad(0.77), np.deg2rad(1)],
 #                    [1, np.deg2rad(-0.3), np.deg2rad(-0.6)], [1, np.deg2rad(-0.4), np.deg2rad(0.5)],
@@ -104,8 +87,6 @@ sources = np.array([[  1.00000000e+00,   3.83510434e-16,   0.00000000e+00],
        [  1.00000000e+00,   6.98131701e-03,   8.72664626e-03],
        [  1.00000000e+00,  -8.72664626e-03,  -8.72664626e-03]])
 sources = _normalise(sources)
-
-print(sources)
 
 #*************************************************************************************************
 
@@ -155,10 +136,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         self.n_dir = sources.shape[0]
 
         ##Initial guess alpha0 (use alpha for convenience sake).
-        np.random.seed(3)
-        # self.alpha = 0.05*np.random.randn(self.n_ant, self.n_param, self.n_cor)
         self.alpha = np.zeros((self.n_ant, self.n_param, self.n_cor))
-        self.alpha[:,0,:] = 1
 
         ##I am making basis an attribute so that it is easier to compute gains
         ##inside implement_update().
@@ -233,7 +211,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         #----using cubical-----------#
         ##Need to check this with Jonathan!
-        # self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
+        self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
 
         #Initialise residual as data since we just need to subtract the model in every direction.
         residual = data_arr.copy()
@@ -246,7 +224,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                     for q in range(p):  #note only doing this for q < p
                         for s in range(self.n_dir):
                             #Subtract model for each direction.
-                            residual[0, t, f, p, q] -= gains[s, tt, ff, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, ff, q].T)
+                            # residual[0, t, f, p, q] -= gains[s, tt, ff, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, ff, q].T)
                             for k in range(self.n_cor):
                                 #Get Jacobian.
                                 for param in range(self.n_param):
@@ -256,16 +234,13 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                                     jac[t, f, p, q, k, q, param, k] += -dphidalpha * gains[s, tt, ff, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, ff, q, k, k])
 
                         #Set [q,p] element as conjugate of [p,q] (LB - is this correct for the Jacobian as well?)
-                        residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
+                        # residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
                         jac[t, f, q, p] = np.conj(jac[t, f, p, q])
-
-        # print(model_arr[0,0,0,0,0,1])
 
         ##Reshape the Jacobian to a 2D shape and residuals to 1D.
         jac = np.reshape(jac, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor, self.n_ant*self.n_param*self.n_cor))
-        #self.residual = np.reshape(self.residual, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor*self.n_cor))
 
-        return jac, residual
+        return jac, self.residuals
 
     def get_xx_yy_residual(self, residual):
         """
@@ -350,9 +325,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         #Change shape of residual to match the second axis of JH.
         residual = self.get_xx_yy_residual(residual_2x2)
 
-        print(model_arr[:,0,0,0,0,1])
-        # print(jac.shape)
-
         jh = np.conjugate(jac.T)
 
         # print(jac, jh)
@@ -365,8 +337,6 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             jhj = np.dot(jh, jac) # It is possible that this is wrong. Diag
                                   # entries agree but not sure about off-diag.
             np.save("full_jhj", jhj)
-
-            print(np.linalg.matrix_rank(jhj))
 
         ##Initialise JHr.
         jhr = np.zeros((self.n_ant*self.n_param*self.n_cor), dtype=self.dtype)
@@ -417,8 +387,10 @@ class ParametrisedPhaseMachine(PerIntervalGains):
 
         delta_alpha = np.reshape(delta_alpha, (self.n_ant, self.n_param, self.n_cor))
         self.alpha += 0.5*delta_alpha
-        # print(self.alpha)
 
+        # Necessary evil for now - this causes the conjugate gains to be
+        # computed correctly.
+        self._gh_update = True
 
         #Need to turn updated parameters into gains.
         self.make_gains()
