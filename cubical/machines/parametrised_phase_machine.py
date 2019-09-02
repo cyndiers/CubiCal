@@ -274,11 +274,11 @@ class ParametrisedPhaseMachine(PerIntervalGains):
         #----using cubical-----------#
         ##Need to check this with Jonathan!
         #residual = np.empty_like(data_arr)
-        #self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
+        self.residuals = self.compute_residual(data_arr, model_arr, self.residuals)
         #residual_2x2 = self.compute_residual(data_arr, model_arr, residual)
 
         #Initialise residual as data since we just need to subtract the model in every direction.
-        residual = data_arr.copy()
+        #residual = data_arr.copy()
 
         for t in range(self.n_tim):
             tt = t//self.t_int
@@ -287,7 +287,7 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                     for q in range(p):  #note only doing this for q < p
                         for s in range(self.n_dir):
                             #Subtract model for each direction.
-                            residual[0, t, f, p, q] -= gains[s, tt, f, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, f, q].T)
+                            #residual[0, t, f, p, q] -= gains[s, tt, f, p] * model_arr[s, 0, t, f, p, q] * np.conj(gains[s, tt, f, q].T)
                             for k in range(self.n_cor):
                                 #Get Jacobian.
                                 for param in range(self.n_param):
@@ -297,14 +297,14 @@ class ParametrisedPhaseMachine(PerIntervalGains):
                                     jac[t, f, p, q, k, tt, q, param, k] += -dphidalpha * gains[s, tt, f, p, k, k] * model_arr[s, 0, t, f, p, q, k, k] * np.conj(gains[s, tt, f, q, k, k])
 
                         #Set [q,p] element as conjugate of [p,q] (LB - is this correct for the Jacobian as well?)
-                        residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
+                        #residual[0, t, f, q, p] = np.conj(residual[0, t, f, p, q])
                         jac[t, f, q, p] = np.conj(jac[t, f, p, q])
     
         ##Reshape the Jacobian to a 2D shape and residuals to 1D.
         jac = np.reshape(jac, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor, self.n_timint*self.n_ant*self.n_param*self.n_cor))
         #self.residual = np.reshape(self.residual, (self.n_tim*self.n_fre*self.n_ant*self.n_ant*self.n_cor*self.n_cor))
 
-        return jac, residual #self.residuals
+        return jac, self.residuals #residual
 
     def get_xx_yy_residual(self, residual):
         """
@@ -453,6 +453,8 @@ class ParametrisedPhaseMachine(PerIntervalGains):
             self.alpha += 0.5*delta_alpha
         else:
             self.alpha += delta_alpha
+
+        self._gh_update = True
 
         #Need to turn updated parameters into gains.
         self.make_gains()
